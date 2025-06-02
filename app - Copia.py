@@ -30,15 +30,7 @@ def get_token():
     else:
         raise Exception("Errore ottenimento token: " + response.text)
 
-@app.route("/")
-def home():
-    return "Hello, world! The app is running."
-
-# Nuova route separata
 @app.route("/company-info")
-def company_info():
-    return "Pagina company info"
-
 def company_info():
     vat_code = request.args.get("vatCode")
     if not vat_code:
