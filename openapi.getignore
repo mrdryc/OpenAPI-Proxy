@@ -1,0 +1,30 @@
+# Ignora il file di configurazione con credenziali sensibili
+.env
+
+# Cache di Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# File dell’ambiente virtuale
+.venv/
+venv/
+ENV/
+env/
+
+# File temporanei dell’editor
+*.swp
+*~
+.idea/
+.vscode/
+.DS_Store
+
+# Log
+*.log
+
+# Configurazione locale
+instance/
+.webassets-cache
+
+# SQLite DB
+*.sqlite3
