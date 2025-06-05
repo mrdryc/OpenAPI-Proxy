@@ -5,58 +5,120 @@ import requests
 import base64
 import logging
 
-# Setup log visibili su Render
-logging.basicConfig(level=logging.INFO)
+# Configurazione logging avanzata
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-# Carica variabili d'ambiente da .env (solo locale)
-load_dotenv()
+# Caricamento variabili d'ambiente
+load_dotenv()  # Solo per sviluppo locale
 
 app = Flask(__name__)
 
-EMAIL = os.getenv("EMAIL")
-API_KEY = os.getenv("API_KEY")
-STATIC_TOKEN = os.getenv("TOKEN")
-
-TOKEN_URL = "https://company.openapi.com/tokens"
-DATA_URL = "https://company.openapi.com/IT-full"
+# Configurazione centralizzata
+CONFIG = {
+    "email": os.getenv("EMAIL"),
+    "api_key": os.getenv("API_KEY"),
+    "static_token": os.getenv("TOKEN"),
+    "token_url": "https://company.openapi.com/tokens",
+    "data_url": "https://company.openapi.com/IT-full",
+    "timeout": 15
+}
 
 def get_token():
-    if STATIC_TOKEN:
-        logging.info("Utilizzo token statico")
-        return STATIC_TOKEN
-    credentials = f"{EMAIL}:{API_KEY}"
-    headers = {
-        "Authorization": "Basic " + base64.b64encode(credentials.encode()).decode()
-    }
-    response = requests.post(TOKEN_URL, headers=headers)
-    if response.status_code == 200:
-        return response.json()["token"]
-    else:
-        raise Exception("Errore ottenimento token: " + response.text)
+    """Gestisce l'autenticazione con fallback al token statico"""
+    try:
+        if CONFIG["static_token"]:
+            logger.info("Using static token")
+            return CONFIG["static_token"]
+        
+        logger.debug("Generating new token with credentials")
+        credentials = f"{CONFIG['email']}:{CONFIG['api_key']}"
+        
+        # Verifica encoding Base64
+        encoded_creds = base64.b64encode(credentials.encode()).decode()
+        logger.debug(f"Encoded credentials: {encoded_creds[:6]}...")
+        
+        response = requests.post(
+            CONFIG["token_url"],
+            headers={"Authorization": f"Basic {encoded_creds}"},
+            timeout=CONFIG["timeout"]
+        )
+        response.raise_for_status()
+        
+        token = response.json().get("token")
+        logger.debug(f"Token received: {token[:6]}...")
+        return token
+        
+    except Exception as e:
+        logger.error(f"Token error: {str(e)}")
+        raise
 
 @app.route("/")
 def home():
-    return "✅ OpenAPI Proxy attivo!"
+    return jsonify({
+        "status": "active",
+        "version": "1.0.0",
+        "routes": {
+            "company_info": "/company-info?vatCode=<VAT_CODE>"
+        }
+    })
 
 @app.route("/company-info")
 def company_info():
-    vat_code = request.args.get("vatCode")
-    if not vat_code:
-        return jsonify({"error": "Parametro vatCode mancante"}), 400
+    """Endpoint principale per i dati aziendali"""
     try:
-        logging.info(f"Richiesta per VAT: {vat_code}")
+        vat_code = request.args.get("vatCode")
+        logger.info(f"New request - VAT: {vat_code}")
+        
+        # Validazione avanzata
+        if not vat_code or not vat_code.isdigit() or len(vat_code) != 11:
+            logger.warning(f"Invalid VAT: {vat_code}")
+            return jsonify({
+                "error": "VAT code must be 11 numeric characters",
+                "example": "12345678901"
+            }), 400
+        
+        # Autenticazione
         token = get_token()
-        headers = {"Authorization": f"Bearer {token}"}
-        resp = requests.get(DATA_URL, headers=headers, params={"vatCode": vat_code})
-        logging.info(f"Status code API: {resp.status_code}")
-        resp.raise_for_status()
-        return jsonify(resp.json()), 200
+        logger.debug(f"Using token: {token[:6]}...")
+        
+        # Richiesta API
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "User-Agent": "OpenAPI-Proxy/1.0"
+        }
+        
+        logger.debug(f"Request headers: {headers}")
+        response = requests.get(
+            CONFIG["data_url"],
+            headers=headers,
+            params={"vatCode": vat_code},
+            timeout=CONFIG["timeout"]
+        )
+        
+        logger.info(f"API response code: {response.status_code}")
+        
+        # Gestione risposta
+        response.raise_for_status()
+        return jsonify(response.json()), 200
+        
     except requests.exceptions.HTTPError as e:
-        logging.error("Errore HTTP: " + str(e))
-        return jsonify({"error": str(e)}), resp.status_code
+        error_msg = f"API Error: {e.response.status_code} - {e.response.text[:100]}"
+        logger.error(error_msg)
+        return jsonify({
+            "error": "External API error",
+            "details": error_msg
+        }), e.response.status_code
+        
     except Exception as e:
-        logging.error("Errore generico: " + str(e))
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        return jsonify({
+            "error": "Internal server error",
+            "details": str(e)
+        }), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
