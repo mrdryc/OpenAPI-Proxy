@@ -6,4 +6,12 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
     autoDeploy: true
+    envVars:
+      - key: EMAIL
+        value: maurizio.secco@taxdry.com
+      - key: API_KEY
+        value: w2l5e7ckhmqqzawtbvqw9nnkhbsskqsz
+      - key: TOKEN
+        value: 683630af5750ead9fd034507  # opzionale se vuoi usare un token fisso
+
 
