@@ -24,7 +24,8 @@ CONFIG = {
     "static_token": os.getenv("TOKEN"),
     "token_url": "https://company.openapi.com/tokens",
     "data_url": "https://company.openapi.com/IT-full",
-    "timeout": int(os.getenv("API_TIMEOUT", 15))  # Timeout configurabile da env
+    "timeout": int(os.getenv("API_TIMEOUT", 15))  
+    # Timeout configurabile da env
 }
 
 def get_token():
@@ -97,7 +98,7 @@ def company_info():
         response = requests.get(
             CONFIG["data_url"],
             headers=headers,
-            params={"vatCode": vat_code},
+            params={"vatCode": vat_code.strip()},
             timeout=CONFIG["timeout"]
         )
 
