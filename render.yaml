@@ -4,9 +4,11 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: gunicorn app:app --workers 4 --worker-class gevent --timeout 30
     autoDeploy: true
     envVars:
+      - key: PYTHONUNBUFFERED
+        value: 1
       - key: EMAIL
         value: maurizio.secco@taxdry.com
       - key: API_KEY

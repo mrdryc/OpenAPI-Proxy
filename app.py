@@ -55,17 +55,34 @@ def get_token():
             wait_time = CONFIG["backoff_factor"] ** attempt
             logger.warning(f"Token request failed (attempt {attempt+1}), retrying in {wait_time:.1f}s...")
             time.sleep(wait_time)
+from tenacity import retry, stop_after_attempt, wait_exponential
+from flask_caching import Cache
+
+cache = Cache(config={'CACHE_TYPE': 'SimpleCache', 'CACHE_DEFAULT_TIMEOUT': 300})
+cache.init_app(app)
 
 @app.route("/company-info/<vat_code>")
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=10))
+@cache.cached(timeout=300, query_string=True)
 def company_info(vat_code):
     """Endpoint con gestione avanzata dei timeout e retry"""
+    start_time = time.time()
     try:
+        logger.info(f"Inizio richiesta VAT: {vat_code}")
         # Validazione VAT code
         if not vat_code.isdigit() or len(vat_code) != 11:
             return jsonify({
                 "error": "Formato VAT code non valido",
                 "suggestion": "Usa 11 cifre numeriche (es: 12345678901)"
             }), 400
+        response = requests.get(api_url, headers=headers, timeout=25)
+        response.raise_for_status()
+        return jsonify(response.json()), 200
+            
+    except requests.exceptions.Timeout:
+        logger.error("Timeout dopo 25 secondi")
+        return jsonify({"error": "Timeout del servizio esterno"}), 504
 
         token = get_token()
         headers = {"Authorization": f"Bearer {token}"}
@@ -108,6 +125,19 @@ def company_info(vat_code):
             "error": "Errore temporaneo del server",
             "action": "Riprova tra qualche minuto"
         }), 500
+    finally:
+        elapsed = time.time() - start_time
+        logger.info(f"Richiesta VAT:{vat_code} completata in {elapsed:.2f}s")
+        
+@app.errorhandler(500)
+def handle_server_error(e):
+    logger.error(f"Errore interno: {str(e)}", exc_info=True)
+    return jsonify(error="Errore temporaneo, riprovare"), 500
+
+@app.errorhandler(504)
+def handle_gateway_timeout(e):
+    logger.warning("Timeout Gateway dall'API esterna")
+    return jsonify(error="Il servizio esterno non risponde"), 504
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
