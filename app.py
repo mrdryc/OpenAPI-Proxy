@@ -21,7 +21,6 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app, origins=["https://chat.openai.com", "https://chatgpt.com"])
 
-# Configurazione centralizzata
 CONFIG = {
     "email": os.getenv("OPENAPI_EMAIL"),
     "api_key": os.getenv("OPENAPI_API_KEY"),
@@ -34,7 +33,6 @@ CONFIG = {
     "token_refresh": timedelta(minutes=55)
 }
 
-# Cache per il token e le risposte
 TOKEN_CACHE = {
     "value": None,
     "expiry": None,
@@ -45,7 +43,7 @@ cache = Cache(config={'CACHE_TYPE': 'SimpleCache', 'CACHE_DEFAULT_TIMEOUT': 300}
 cache.init_app(app)
 
 def get_token():
-    """Gestisce l'autenticazione con cache e refresh automatico"""
+    """Gestione token statico o dinamico con cache (il refresh serve solo per token dinamici)"""
     try:
         if CONFIG["static_token"]:
             if TOKEN_CACHE["value"] != CONFIG["static_token"]:
@@ -58,21 +56,17 @@ def get_token():
             logger.info("Generazione nuovo token dinamico")
             credentials = f"{CONFIG['email']}:{CONFIG['api_key']}"
             encoded_creds = base64.b64encode(credentials.encode()).decode()
-            
             response = requests.post(
                 CONFIG["token_url"],
                 headers={"Authorization": f"Basic {encoded_creds}"},
                 timeout=CONFIG["timeout"]
             )
             response.raise_for_status()
-            
             TOKEN_CACHE["value"] = response.json().get("token")
             TOKEN_CACHE["expiry"] = datetime.now() + CONFIG["token_refresh"]
             TOKEN_CACHE["refresh_count"] += 1
             logger.debug(f"Nuovo token generato: {TOKEN_CACHE['value'][:6]}...")
-        
         return TOKEN_CACHE["value"]
-    
     except Exception as e:
         logger.error(f"Errore generazione token: {str(e)}")
         raise
@@ -156,8 +150,6 @@ def company_info(vat_code):
     start_time = time.time()
     try:
         logger.info(f"Nuova richiesta VAT: {vat_code}")
-        
-        # Validazione input
         if not vat_code.isdigit() or len(vat_code) != 11:
             logger.warning(f"VAT non valido: {vat_code}")
             return jsonify({
@@ -165,7 +157,6 @@ def company_info(vat_code):
                 "example": "12345678901"
             }), 400
 
-        # Autenticazione
         token = get_token()
         headers = {
             "Authorization": f"Bearer {token}",
@@ -173,16 +164,12 @@ def company_info(vat_code):
         }
         api_url = f"{CONFIG['data_url']}/{vat_code}"
 
-        # Richiesta all'API esterna
         response = requests.get(
             api_url,
             headers=headers,
             timeout=CONFIG["timeout"]
         )
-        
-        # Gestione errori HTTP
         response.raise_for_status()
-        
         return jsonify({
             "success": True,
             "data": response.json(),
@@ -193,10 +180,8 @@ def company_info(vat_code):
     except requests.exceptions.HTTPError as e:
         status_code = e.response.status_code
         logger.error(f"Errore API {status_code}: {e.response.text[:200]}")
-        
         if status_code == 401:
-            TOKEN_CACHE["value"] = None  # Forza refresh token
-        
+            TOKEN_CACHE["value"] = None  # Forza refresh token solo se dinamico
         return jsonify({
             "success": False,
             "error": "Errore servizio esterno",
