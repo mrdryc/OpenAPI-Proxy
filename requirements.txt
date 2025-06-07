@@ -1,7 +1,7 @@
-Flask==2.3.3
+flask==2.3.3
 requests==2.31.0
 python-dotenv==1.0.1
-gunicorn
-tenacity
-Flask-Caching
+gunicorn==23.0.0
+tenacity==8.2.3
+flask-cors==4.0.0  # Nuova dipendenza
 
