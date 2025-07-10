@@ -14,6 +14,6 @@ services:
       - key: API_KEY
         value: w2l5e7ckhmqqzawtbvqw9nnkhbsskqsz
       - key: TOKEN
-        value: 683630af5750ead9fd034507  # opzionale se vuoi usare un token fisso
+        value: 686fee39d75daa5a8a078c15  # opzionale se vuoi usare un token fisso
 
 
